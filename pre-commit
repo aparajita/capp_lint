@@ -6,6 +6,9 @@
 # it wants to stop the commit.
 #
 # To enable this hook, rename this file to "pre-commit".
+#
+# Based on pre-commit hook from kitware.com.
+# Modifications by Aparajita Fishman, aparajita@vasudevaserver.org
 
 die() {
     echo '-------------------------' 1>&2
