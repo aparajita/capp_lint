@@ -57,7 +57,7 @@ fi
 #-----------------------------------------------------------------------------
 # Check trailing whitespace.
 
-if [[ `git diff-index --check --cached $against --` ]]; then
+if test "$(git diff-index --check --cached $against --)"; then
 	die 'The following whitespace errors have been found:
 
 '"$(git diff-index --check --cached $against --)"
