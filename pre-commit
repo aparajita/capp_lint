@@ -9,10 +9,10 @@
 
 die() {
     echo '-------------------------' 1>&2
-	echo 'pre-commit check failure' 1>&2
+    echo 'pre-commit check failure' 1>&2
     echo '-------------------------' 1>&2
-	echo "$@" 1>&2
-	exit 1
+    echo "$@" 1>&2
+    exit 1
 }
 
 #-----------------------------------------------------------------------------
@@ -20,8 +20,8 @@ die() {
 advice='
 Use the commands:
 
-	git config --global user.name '\''Your Name'\''
-	git config --global user.email '\''you@yourdomain.com'\''
+    git config --global user.name '\''Your Name'\''
+    git config --global user.email '\''you@yourdomain.com'\''
 
 to introduce yourself to Git before committing.'
 
@@ -40,26 +40,36 @@ die 'Please set user.email to an email address (userid@validdomain.com).' "$advi
 # Check content that will be added by this commit.
 
 if git rev-parse --verify -q HEAD > /dev/null; then
-	against=HEAD
+    against=HEAD
 else
-	# Initial commit: diff against an empty tree object
-	against=4b825dc642cb6eb9a060e54bf8d69288fbee4904
+    # Initial commit: diff against an empty tree object
+    against=4b825dc642cb6eb9a060e54bf8d69288fbee4904
 fi
 
 # Disallow non-ascii file names. The printable range starts at the
 # space character and ends with tilde.
 if test "$(git diff --cached --name-only --diff-filter=A -z $against |
-	   LC_ALL=C tr -d '[ -~]\0')"; then
-	die 'Non-ascii file names may not be added:
+       LC_ALL=C tr -d '[ -~]\0')"; then
+    die 'Non-ascii file names may not be added:
 '"$(git diff --cached --name-only --diff-filter=A $against)"
+fi
+
+#-----------------------------------------------------------------------------
+# Check for inadvertent globals and dangling variable declarations.
+
+if test "$(git diff --cached --name-only --diff-filter=AM $against | .git/hooks/capp_check.py)"; then
+    die 'The following variable declaration errors have been found:
+
+'"$(git diff --cached --name-only --diff-filter=AM $against | .git/hooks/capp_check.py)"
 fi
 
 #-----------------------------------------------------------------------------
 # Check trailing whitespace.
 
-if test "$(git diff-index --check --cached $against --)"; then
-	die 'The following whitespace errors have been found:
+if [[ `git diff-index --check --cached $against --` ]]; then
+    die 'The following whitespace errors have been found:
 
 '"$(git diff-index --check --cached $against --)"
 fi
 
+exit 0
