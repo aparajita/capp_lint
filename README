@@ -59,3 +59,23 @@ OUTPUT
     The filename (relative to the working directory), line number, and type of error are displayed
     first, followed by the offending line of source code. When possible and necessary (as in this example),
     the location of the errors is indicated below the source line.
+
+KNOWN BUGS
+    capp_lint.py will currently flag false positives for the following cases I know of:
+
+    var foo =
+    [
+        "bar"
+    ]
+
+    - unterminated var block because the first line has no separator.
+
+    var foo = (bar) |
+              (foo);
+
+    - missing statement separator
+
+    var x, y, z;
+
+    - unterminated var block. This is not actually a bug -- multiple variables are not supposed
+      to be declared on a single line. The error condition is not properly described.
