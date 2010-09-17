@@ -12,6 +12,11 @@ die() {
     echo 'pre-commit check failure' 1>&2
     echo '-------------------------' 1>&2
     echo "$@" 1>&2
+
+    if [ -f /tmp/capp_lint.tmp ]; then
+        rm -f /tmp/capp_lint.tmp
+    fi
+
     exit 1
 }
 
@@ -57,19 +62,14 @@ fi
 #-----------------------------------------------------------------------------
 # Check for inadvertent globals and dangling variable declarations.
 
-if test "$(git diff --cached --name-only --diff-filter=AM $against | .git/hooks/capp_check.py)"; then
-    die 'The following variable declaration errors have been found:
+git diff --cached --name-only --diff-filter=AM $against | .git/hooks/capp_lint.py - > /tmp/capp_lint.tmp
 
-'"$(git diff --cached --name-only --diff-filter=AM $against | .git/hooks/capp_check.py)"
-fi
+if [ -s /tmp/capp_lint.tmp ]; then
+    die 'The following lint errors were found:
 
-#-----------------------------------------------------------------------------
-# Check trailing whitespace.
-
-if [[ `git diff-index --check --cached $against --` ]]; then
-    die 'The following whitespace errors have been found:
-
-'"$(git diff-index --check --cached $against --)"
+'"$(cat /tmp/capp_lint.tmp)"
+else
+    rm -f /tmp/capp_lint.tmp
 fi
 
 exit 0

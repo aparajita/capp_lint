@@ -1,0 +1,61 @@
+NAME
+    capp_lint.py -- check formatting of Objective-J files
+
+SYNOPSIS
+    capp_lint.py [options] [file ... | -]
+
+DESCRIPTION
+    capp_lint.py is a formatting checker for Objective-J. It performs a number of checks that catch
+    common formatting mistakes, as defined in the Cappuccino coding style guidelines
+    (http://cappuccino.org/contribute/coding-style.php).
+
+    capp_lint.py operates on a list of files. You may pass one or more filenames (relative to the
+    current working directory) as arguments to capp_lint.py, or if the first filename is "-", the
+    list of filenames is taken from stdin, in which case everything after the "-" is ignored.
+
+    The following options are available:
+
+    -v/--verbose
+        Displays each line as it is processed by capp_lint.py with a line number,
+        along with some information about syntactic information it finds.
+
+    -q/--quiet
+        Normally capp_lint.py will print a list of the errors it finds. If this option is passed,
+        the error list is suppressed. This option is mutually exclusive with the -v option.
+
+    -h/--help
+        Shows a synopsis of the usage and options and exits.
+
+    The following formatting errors are flagged by capp_lint.py:
+
+    - Lines which contain one or more tabs.
+    - Missing space between control statements and their opening parentheses.
+    - Trailing whitespace.
+    - Binary operators without surrounding space.
+    - Assignment operators without surrounding space.
+    - Comparison operators without surrounding space.
+    - Useless unary + operators.
+    - Extra or missing space in a method declaration.
+    - Superflous function names.
+    - Unterminated variable blocks.
+    - Consecutive var statements.
+    - Incorrect indentation in a var block.
+    - Missing statement separators in a var block.
+    - Inadvertent global variables in a var block.
+    - Unbalanced [, { or ( in a variable block.
+
+EXIT STATUS
+    If capp_lint.py exits with a return status of one if it finds any errors. If no errors are found,
+    it exits with a return status of zero.
+
+OUTPUT
+    For each error that capp_lint.py finds, if the -q/--quiet option was not passed, capp_lint.py
+    will output an error like the following:
+
+    AppKit/CPObjectController.j:482: assignment operator without surrounding spaces.
+    +    for (var i=0, count=[_observationProxies count]; i<count; i++)
+                   ^        ^
+
+    The filename (relative to the working directory), line number, and type of error are displayed
+    first, followed by the offending line of source code. When possible and necessary (as in this example),
+    the location of the errors is indicated below the source line.
