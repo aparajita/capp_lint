@@ -366,6 +366,9 @@ class LintChecker(object):
 
 
     def var_block(self, blockMatch):
+        # Keep track of whether this var block has multiple declarations
+        isSingleVar = True
+
         # Keep track of the indent of the var keyword to compare with following lines
         self.varIndent = blockMatch.group('indent')
 
@@ -377,20 +380,19 @@ class LintChecker(object):
         self.get_expression(blockMatch)
 
         if not self.pairs_balanced(blockMatch):
-            return False
+            return (False, False)
+
+        separator = ''
 
         if self.expression:
             match = self.SEPARATOR_RE.match(self.expression)
 
             if not match:
                 self.error('missing statement separator')
-                return False
-
-            separator = match.group('separator')
+            else:
+                separator = match.group('separator')
         elif blockMatch.group('separator'):
             separator = blockMatch.group('separator')
-        else:
-            separator = ''
 
         # If the block has a semicolon, there should be no more lines in the block
         blockHasSemicolon = separator == ';'
@@ -405,6 +407,7 @@ class LintChecker(object):
         blockRE = re.compile(self.VAR_BLOCK_RE_TEMPLATE % len(self.identifierIndent))
 
         while self.next_statement(expect_line=not blockHasSemicolon):
+
             if not self.is_statement():
                 continue
 
@@ -423,7 +426,7 @@ class LintChecker(object):
                 self.get_expression(match)
 
                 if not self.pairs_balanced(match):
-                    return False
+                    return (False, isSingleVar)
 
                 if self.expression:
                     separatorMatch = self.SEPARATOR_RE.match(self.expression)
@@ -442,6 +445,8 @@ class LintChecker(object):
                 elif match.group('separator'):
                     separator = match.group('separator')
 
+                isSingleVar = False
+
             else:
                 # If the line does not match, it is not an assignment or is outdented from the block.
                 # In either case, the block is considered closed. If the most recent separator was not ';',
@@ -449,11 +454,12 @@ class LintChecker(object):
                 if separator != ';':
                     self.error('unterminated var block', lineNum=lastBlockLineNum, line=lastBlockLine)
 
-                return True
+                return (True, isSingleVar)
 
 
     def check_var_blocks(self):
-        lastStatementWasVarBlock = False
+        lastStatementWasVar = False
+        lastVarWasSingle = False
         haveLine = True
 
         while True:
@@ -467,7 +473,7 @@ class LintChecker(object):
             match = self.VAR_BLOCK_START_RE.match(self.line)
 
             if match is None:
-                lastStatementWasVarBlock = False
+                lastStatementWasVar = False
                 haveLine = False
                 continue
 
@@ -478,7 +484,7 @@ class LintChecker(object):
                 functionMatch = self.FUNCTION_RE.match(expression)
 
                 if functionMatch:
-                    lastStatementWasVarBlock = False
+                    lastStatementWasVar = False
                     haveLine = False
                     continue
 
@@ -486,14 +492,24 @@ class LintChecker(object):
             if self.verbose:
                 print '%d: VAR BLOCK' % self.lineNum
 
-            if lastStatementWasVarBlock:
-                self.error('consecutive var declarations')
+            varLineNum = self.lineNum
+            varLine = self.line
 
-            haveLine = self.var_block(match)
-            lastStatementWasVarBlock = True
+            haveLine, isSingleVar = self.var_block(match)
 
             if self.verbose:
-                print '%d: END VAR BLOCK' % self.lineNum
+                print '%d: END VAR BLOCK:' % self.lineNum,
+
+                if isSingleVar:
+                    print 'SINGLE'
+                else:
+                    print 'MULTIPLE'
+
+            if lastStatementWasVar and (lastVarWasSingle or isSingleVar):
+                self.error('consecutive var declarations', lineNum=varLineNum, line=varLine)
+
+            lastStatementWasVar = True
+            lastVarWasSingle = isSingleVar
 
 
     def run_file_checks(self):
@@ -591,7 +607,8 @@ if __name__ == '__main__':
     checker = LintChecker(options.verbose)
 
     for filename in filenames:
-        checker.lint(filename)
+        if filename.endswith('.j'):
+            checker.lint(filename)
 
     if checker.has_errors():
         if not options.quiet:
