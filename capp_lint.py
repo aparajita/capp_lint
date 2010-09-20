@@ -69,6 +69,11 @@ class LintChecker(object):
             'showPositionForGroup': 1,
         },
         {
+            'regex': re.compile(r'^\s*(?:(?:else )?if|for|switch|while|with)\s*\(.+\)\s*(\{)\s*(?://.*|/\*.*\*/\s*)?$'),
+            'error': 'braces should be on their own line',
+            'showPositionForGroup': 1,
+        },
+        {
             'regex': re.compile(r'^.*\s+$'),
             'error': 'trailing whitespace',
         },
