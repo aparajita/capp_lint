@@ -607,7 +607,7 @@ if __name__ == '__main__':
 
     usage = 'usage: %prog [options] [file ... | -]'
     parser = OptionParser(usage=usage)
-    parser.add_option('--var-declarations', action='store', type='string', dest='var_declarations', default='single')
+    parser.add_option('--var-declarations', action='store', type='string', dest='var_declarations', default='single', help='set the policy for flagging consecutive var declarations')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False, help='show what lint is doing')
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet', default=False, help='do not display errors, only return an exit code')
     (options, args) = parser.parse_args()
