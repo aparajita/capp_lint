@@ -22,6 +22,25 @@ DESCRIPTION
                      a single variable, the second var block will be flagged.
             strict - Any consecutive var declarations will be flagged.
 
+        Given the following code:
+
+            var foo = "bar",
+                bar = "foo";
+
+            var bow = "foobar",
+                wow = "woof";
+
+        The "none" policy will obviously not flag this. The "single" policy will not flag
+        this because both blocks contain more than one declaration. The "strict" policy
+        will flag this. Given the following code:
+
+            var foo = "bar",
+                bar = "foo";
+
+            var bow = "foobar";
+
+        The "single" policy will flag this because the second block is a single declaration.
+
     -v/--verbose
         Displays each line as it is processed by capp_lint.py with a line number,
         along with some information about syntactic information it finds.
