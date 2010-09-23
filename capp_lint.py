@@ -13,20 +13,20 @@ class LintChecker(object):
     VAR_BLOCK_START_RE = re.compile(r'''(?x)
         (?P<indent>\s*)         # indent before a var keyword
         (?P<var>var\s+)         # var keyword and whitespace after
-        (?P<identifier>[_a-zA-Z]\w*)\s*
+        (?P<identifier>[a-zA-Z_$]\w*)\s*
         (?:
             (?P<assignment>=)\s*
             (?P<expression>.*)
             |
-            (?P<separator>[,;])
+            (?P<separator>[,;+\-/*%^&|=\\])
         )
     ''')
 
     SEPARATOR_RE = re.compile(r'''(?x)
-        (?P<expression>.*)      # Everything up to the line separator
-        (?P<separator>[,;])     # The line separator
-        \s*                     # Optional whitespace after
-        $                       # End of expression
+        (?P<expression>.*)              # Everything up to the line separator
+        (?P<separator>[,;+\-/*%^&|=\\]) # The line separator
+        \s*                             # Optional whitespace after
+        $                               # End of expression
     ''')
 
     INDENTED_EXPRESSION_RE_TEMPLATE = r'''(?x)
@@ -40,23 +40,26 @@ class LintChecker(object):
         (?:
             (?P<bracket>[\[\{].*)
             |
-            (?P<identifier>[_a-zA-Z]\w*)\s*
+            (?P<identifier>[a-zA-Z_$]\w*)\s*
             (?:
                 (?P<assignment>=)\s*
                 (?P<expression>.*)
                 |
-                (?P<separator>[,;])
+                (?P<separator>[,;+\-/*%%^&|=\\])
             )
+            |
+            (?P<indented_expression>.+)
         )
     '''
 
-    STRIP_LINE_COMMENT_RE = re.compile(r'(.*?)\s*(?://.*|/\*.*\*/\s*)$')
+    STRIP_LINE_COMMENT_RE = re.compile(r'(.*)\s*(?://.*|/\*.*\*/\s*)$')
     LINE_COMMENT_RE = re.compile(r'\s*(?:/\*.*\*/\s*|//.*)$')
     BLOCK_COMMENT_START_RE = re.compile(r'\s*/\*.*(?!\*/\s*)$')
     BLOCK_COMMENT_END_RE = re.compile(r'.*?\*/')
-    FUNCTION_RE = re.compile(r'\s*function\s*(?P<name>[_a-zA-Z]\w*)?\(.*\)\s*\{?')
+    FUNCTION_RE = re.compile(r'\s*function\s*(?P<name>[a-zA-Z_$]\w*)?\(.*\)\s*\{?')
     STRING_LITERAL_RE = re.compile(r'(?<!\\)(["\'])(.*?)(?<!\\)\1')
     EMPTY_STRING_LITERAL_FUNCTION = lambda match: match.group(1) + (len(match.group(2)) * ' ') + match.group(1)
+    EMPTY_SELF_STRING_LITERAL_FUNCTION = lambda self, match: match.group(1) + (len(match.group(2)) * ' ') + match.group(1)
 
     LINE_CHECKLIST = (
         {
@@ -130,9 +133,15 @@ class LintChecker(object):
         },
     )
 
+    VAR_DECLARATIONS        = ('none', 'single', 'strict')
+    VAR_DECLARATIONS_NONE   = 0
+    VAR_DECLARATIONS_SINGLE = 1
+    VAR_DECLARATIONS_STRICT = 2
 
-    def __init__(self, verbose):
+
+    def __init__(self, var_declarations=VAR_DECLARATIONS_SINGLE, verbose=False):
         self.errors = []
+        self.varDeclarations = var_declarations
         self.verbose = verbose
         self.sourcefile = None
         self.filename = ''
@@ -253,8 +262,15 @@ class LintChecker(object):
             self.expression = groupdict.get('bracket')
 
         if self.expression is None:
+            self.expression = groupdict.get('indented_expression')
+
+        if self.expression is None:
             self.expression = ''
             return
+
+        # Remove all quoted strings from the expression so that we don't
+        # count unmatched pairs inside the strings.
+        self.expression = self.STRING_LITERAL_RE.sub(self.EMPTY_SELF_STRING_LITERAL_FUNCTION, self.expression)
 
         self.strip_comment()
         self.expression = self.expression.strip()
@@ -348,10 +364,6 @@ class LintChecker(object):
         groups = lineMatchOrBlockMatch.groupdict()
 
         if groups.has_key('assignment') or groups.has_key('bracket'):
-            # Remove all quoted strings from the expression so that we don't
-            # count unmatched pairs inside the strings.
-            self.expression = self.STRING_LITERAL_RE.sub('', self.expression)
-
             squareOpenCount = self.expression.count('[')
             squareOpenCount -= self.expression.count(']')
 
@@ -425,7 +437,7 @@ class LintChecker(object):
 
                 # If the line is indented farther than the first identifier in the block,
                 # it is considered a formatting error.
-                if match.group('indent'):
+                if match.group('indent') and not match.group('indented_expression'):
                     self.error('incorrect indentation')
 
                 self.get_expression(match)
@@ -510,8 +522,10 @@ class LintChecker(object):
                 else:
                     print 'MULTIPLE'
 
-            if lastStatementWasVar and (lastVarWasSingle or isSingleVar):
-                self.error('consecutive var declarations', lineNum=varLineNum, line=varLine)
+            if lastStatementWasVar and self.varDeclarations != self.VAR_DECLARATIONS_NONE:
+                if (self.varDeclarations == self.VAR_DECLARATIONS_SINGLE and lastVarWasSingle and isSingleVar) or \
+                   (self.varDeclarations == self.VAR_DECLARATIONS_STRICT and (lastVarWasSingle or isSingleVar)):
+                    self.error('consecutive var declarations', lineNum=varLineNum, line=varLine)
 
             lastStatementWasVar = True
             lastVarWasSingle = isSingleVar
@@ -593,9 +607,13 @@ if __name__ == '__main__':
 
     usage = 'usage: %prog [options] [file ... | -]'
     parser = OptionParser(usage=usage)
+    parser.add_option('--var-declarations', action='store', type='string', dest='var_declarations', default='single')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False, help='show what lint is doing')
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet', default=False, help='do not display errors, only return an exit code')
     (options, args) = parser.parse_args()
+
+    if options.var_declarations not in LintChecker.VAR_DECLARATIONS:
+        parser.error('--var-declarations must be one of [' + ', '.join(LintChecker.VAR_DECLARATIONS) + ']')
 
     if options.verbose and options.quiet:
         parser.error('options -v/--verbose and -q/--quiet are mutually exclusive')
@@ -609,7 +627,7 @@ if __name__ == '__main__':
     if not filenames:
         sys.exit(0)
 
-    checker = LintChecker(options.verbose)
+    checker = LintChecker(var_declarations=LintChecker.VAR_DECLARATIONS.index(options.var_declarations), verbose=options.verbose)
 
     for filename in filenames:
         if filename.endswith('.j'):

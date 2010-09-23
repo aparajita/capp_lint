@@ -15,6 +15,13 @@ DESCRIPTION
 
     The following options are available:
 
+    --var-declarations=[none|single|strict]
+        Determines the policy in flagging consecutive var declarations. The choices are:
+            none - No checking is done.
+            single - If two var blocks appear consecutively and one of them is
+                     a single variable, the second var block will be flagged.
+            strict - Any consecutive var declarations will be flagged.
+
     -v/--verbose
         Displays each line as it is processed by capp_lint.py with a line number,
         along with some information about syntactic information it finds.
@@ -43,6 +50,7 @@ DESCRIPTION
     - Missing statement separators in a var block.
     - Inadvertent global variables in a var block.
     - Unbalanced [, { or ( in a variable block.
+    - Opening braces on the same line as their control statement.
 
 EXIT STATUS
     If capp_lint.py exits with a return status of one if it finds any errors. If no errors are found,
@@ -67,11 +75,6 @@ KNOWN BUGS
     [
         "bar"
     ]
-
-    - unterminated var block because the first line has no separator.
-
-    var foo = (bar) |
-              (foo);
 
     - missing statement separator
 
