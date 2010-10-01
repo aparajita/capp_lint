@@ -3,6 +3,7 @@
 from __future__ import with_statement
 from optparse import OptionParser
 from string import Template
+import cgi
 import os.path
 import re
 import sys
@@ -21,7 +22,6 @@ def tabs2spaces(text, positions=None):
 
         if positions is not None:
             positions.append(index)
-
 
 class LintChecker(object):
 
@@ -607,34 +607,79 @@ class LintChecker(object):
         return len(self.errors) != 0
 
 
-    def print_errors(self):
-        if self.errors:
-            for error in self.errors:
-                if 'lineNum' in error and 'line' in error:
-                    print Template(u'$filename:$lineNum: $message.\n+$line').substitute(error).encode('utf-8')
+    def print_errors(self, format='text'):
+        if not self.errors:
+            return
 
-                    if error.get('positions'):
-                        markers = ' ' * len(error['line'])
+        if format == 'text':
+            self.print_text_errors()
+        elif format == 'textmate':
+            self.print_textmate_errors()
 
-                        for position in error['positions']:
-                            markers = markers[:position] + '^' + markers[position + 1:]
+    def print_text_errors(self):
+        for error in self.errors:
+            if 'lineNum' in error and 'line' in error:
+                print Template(u'$filename:$lineNum: $message.\n+$line').substitute(error).encode('utf-8')
 
-                        # Add a space at the beginning of the markers to account for the '+' at the beginning
-                        # of the source line.
-                        print u' ' + markers
-                else:
-                    print (u'%s: %s.' % (filename, error)).encode('utf-8')
+                if error.get('positions'):
+                    markers = ' ' * len(error['line'])
 
-                print
+                    for position in error['positions']:
+                        markers = markers[:position] + '^' + markers[position + 1:]
 
+                    # Add a space at the beginning of the markers to account for the '+' at the beginning
+                    # of the source line.
+                    print ' ' + markers
+            else:
+                print '%s: %s.' % (filename, error)
+
+            print
+
+    def print_textmate_errors(self):
+        print """
+<html>
+    <head>
+        <title>Cappuccino Lint Report</title>
+    </head>
+    <body>"""
+
+        for error in self.errors:
+            print "<div>"
+
+            if 'lineNum' in error and 'line' in error:
+                first_column = (error.get('positions') or [0])[0]
+                error['filename'], error['lineNum'], first_column, error['message'], error['line']
+                abs_filename = os.path.abspath(error['filename'])
+                print '<a href="txmt://open/?url=file://%s&line=%d&column=%d">%s:%d:</a> %s.<br/><pre>+ %s</pre>' % (cgi.escape(abs_filename), error['lineNum'], first_column + 1, cgi.escape(error['filename']), error['lineNum'], cgi.escape(error['message']), cgi.escape(error['line']))
+
+                if error.get('positions'):
+                    print "</div><div><pre>",
+                    markers = ' ' * len(error['line'])
+
+                    for position in error['positions']:
+                        markers = markers[:position] + '^' + markers[position + 1:]
+
+                    # Add a space at the beginning of the markers to account for the '+' at the beginning
+                    # of the source line.
+                    print ' ' + markers
+
+                    print "</pre>"
+            else:
+                print format_err(filename, error)
+
+            print "</div>"
+
+        print """
+    </body>
+</html>"""
 
 if __name__ == '__main__':
-
     usage = 'usage: %prog [options] [file ... | -]'
     parser = OptionParser(usage=usage, version='1.02')
     parser.add_option('--var-declarations', action='store', type='string', dest='var_declarations', default='single', help='set the policy for flagging consecutive var declarations')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False, help='show what lint is doing')
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet', default=False, help='do not display errors, only return an exit code')
+    parser.add_option('-f', '--format', action='store', type='string', dest='format', default='text', help='the format to use for the report: text (default) or textmate (HTML in which errors can be clicked on to view in TextMate)')
     (options, args) = parser.parse_args()
 
     if options.var_declarations not in LintChecker.VAR_DECLARATIONS:
@@ -642,6 +687,10 @@ if __name__ == '__main__':
 
     if options.verbose and options.quiet:
         parser.error('options -v/--verbose and -q/--quiet are mutually exclusive')
+
+    options.format = options.format.lower()
+    if not options.format in ('text', 'textmate'):
+        parser.error('format must be either text or textmate')
 
     # We accept a list of filenames (relative to the cwd) either from the command line or from stdin
     filenames = args
@@ -661,7 +710,7 @@ if __name__ == '__main__':
 
     if checker.has_errors():
         if not options.quiet:
-            checker.print_errors()
+            checker.print_errors(options.format)
         sys.exit(1)
     else:
         sys.exit(0)
