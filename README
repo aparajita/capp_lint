@@ -49,12 +49,16 @@ DESCRIPTION
         Normally capp_lint.py will print a list of the errors it finds. If this option is passed,
         the error list is suppressed. This option is mutually exclusive with the -v option.
 
+    --version
+        Displays the current version and exits.
+
     -h/--help
         Shows a synopsis of the usage and options and exits.
 
     The following formatting errors are flagged by capp_lint.py:
 
     - Lines which contain one or more tabs.
+    - Lines which contain non-ASCII characters not within quoted strings.
     - Missing space between control statements and their opening parentheses.
     - Trailing whitespace.
     - Binary operators without surrounding space.
