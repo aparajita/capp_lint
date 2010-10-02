@@ -62,14 +62,18 @@ fi
 #-----------------------------------------------------------------------------
 # Check for inadvertent globals and dangling variable declarations.
 
-git diff --cached --name-only --diff-filter=AM $against | .git/hooks/capp_lint.py - > /tmp/capp_lint.tmp
+fileCount=`git diff --cached --name-only --diff-filter=AM $against | wc -l`
 
-if [ -s /tmp/capp_lint.tmp ]; then
-    die 'The following lint errors were found:
+if [[ fileCount -ne "0" ]]; then
+    git diff --cached --name-only --diff-filter=AM $against | capp_lint.py - > /tmp/capp_lint.tmp
 
-'"$(cat /tmp/capp_lint.tmp)"
-else
-    rm -f /tmp/capp_lint.tmp
+    if [ -s /tmp/capp_lint.tmp ]; then
+        die 'The following lint errors were found:
+
+    '"$(cat /tmp/capp_lint.tmp)"
+    else
+        rm -f /tmp/capp_lint.tmp
+    fi
 fi
 
 exit 0
