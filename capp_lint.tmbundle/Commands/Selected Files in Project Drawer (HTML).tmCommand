@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>beforeRunningCommand</key>
+	<string>nop</string>
+	<key>command</key>
+	<string>#!/bin/bash
+
+lintPath=`"$TM_BUNDLE_SUPPORT/bin/find_capp_lint.sh"`
+
+if [[ -z "$lintPath" ]]; then
+	exit_show_tool_tip "Could not find capp_lint or capp_lint.py"
+fi
+
+eval arr=("$TM_SELECTED_FILES")
+
+if [[ ${#arr[@]} == 0 ]]; then
+   exit_show_tool_tip $'Please select one or more files in the project drawer.'
+fi
+
+"$lintPath" --format=html --basedir="$TM_PROJECT_DIRECTORY" --var-declarations=${TM_CAPP_LINT_VAR_DECLARATIONS:-single} $TM_SELECTED_FILES
+</string>
+	<key>input</key>
+	<string>none</string>
+	<key>keyEquivalent</key>
+	<string>^l</string>
+	<key>name</key>
+	<string>Selected Files in Project Drawer (HTML)</string>
+	<key>output</key>
+	<string>openAsNewDocument</string>
+	<key>uuid</key>
+	<string>4007B28C-D16C-4B12-AB5A-DB5EF9BD40B5</string>
+</dict>
+</plist>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>beforeRunningCommand</key>
+	<string>nop</string>
+	<key>command</key>
+	<string>#!/bin/bash
+
+lintPath=`"$TM_BUNDLE_SUPPORT/bin/find_capp_lint.sh"`
+
+if [[ -z "$lintPath" ]]; then
+	exit_show_tool_tip "Could not find capp_lint or capp_lint.py"
+fi
+
+if [[ -z "$TM_PROJECT_DIRECTORY" ]]; then
+	exit_show_tool_tip "No project directory is set."
+fi
+
+"$lintPath" --format=html --basedir="$TM_PROJECT_DIRECTORY" --var-declarations=${TM_CAPP_LINT_VAR_DECLARATIONS:-single} "$TM_PROJECT_DIRECTORY"
+</string>
+	<key>input</key>
+	<string>none</string>
+	<key>keyEquivalent</key>
+	<string>^l</string>
+	<key>name</key>
+	<string>Entire Project (HTML)</string>
+	<key>output</key>
+	<string>openAsNewDocument</string>
+	<key>uuid</key>
+	<string>AFB9FC59-CAF6-4BB9-AE43-C6F68D3D3A93</string>
+</dict>
+</plist>

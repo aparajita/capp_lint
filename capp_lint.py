@@ -4,10 +4,29 @@ from __future__ import with_statement
 from optparse import OptionParser
 from string import Template
 import cgi
+import os
 import os.path
 import re
 import sys
 import unicodedata
+
+
+EXIT_CODE_SHOW_HTML = 205
+EXIT_CODE_SHOW_TOOLTIP = 206
+
+
+def exit_show_html(html):
+    sys.stdout.write(html.encode('utf-8'))
+    sys.exit(EXIT_CODE_SHOW_HTML)
+
+
+def exit_show_tooltip(text):
+    sys.stdout.write(text)
+    sys.exit(EXIT_CODE_SHOW_TOOLTIP)
+
+
+def within_textmate():
+    return os.getenv('TM_APP_PATH') is not None
 
 
 def tabs2spaces(text, positions=None):
@@ -22,6 +41,14 @@ def tabs2spaces(text, positions=None):
 
         if positions is not None:
             positions.append(index)
+
+
+def relative_path(basedir, filename):
+    if filename.find(basedir) == 0:
+        filename = filename[len(basedir) + 1:]
+
+    return filename
+
 
 class LintChecker(object):
 
@@ -67,6 +94,7 @@ class LintChecker(object):
         )
     '''
 
+    TRAILING_WHITESPACE_RE = re.compile(ur'^.*(\s+)$')
     STRIP_LINE_COMMENT_RE = re.compile(ur'(.*)\s*(?://.*|/\*.*\*/\s*)$')
     LINE_COMMENT_RE = re.compile(ur'\s*(?:/\*.*\*/\s*|//.*)$')
     BLOCK_COMMENT_START_RE = re.compile(ur'\s*/\*.*(?!\*/\s*)$')
@@ -98,8 +126,9 @@ class LintChecker(object):
             'showPositionForGroup': 1,
         },
         {
-            'regex': re.compile(ur'^.*\s+$'),
+            'regex': TRAILING_WHITESPACE_RE,
             'error': 'trailing whitespace',
+            'showPositionForGroup': 1,
         },
         {
             # Filter out @import statements, method declarations, unary plus/minus/increment/decrement
@@ -159,9 +188,18 @@ class LintChecker(object):
     VAR_DECLARATIONS_SINGLE = 1
     VAR_DECLARATIONS_STRICT = 2
 
+    DIRS_TO_SKIP = ('.git', 'Frameworks', 'Build', 'Resources', 'CommonJS', 'Objective-J')
 
-    def __init__(self, var_declarations=VAR_DECLARATIONS_SINGLE, verbose=False):
+    ERROR_FORMATS = ('text', 'html')
+    TEXT_ERROR_SINGLE_FILE_TEMPLATE = Template(u'$lineNum: $message.\n+$line\n')
+    TEXT_ERROR_MULTI_FILE_TEMPLATE = Template(u'$filename:$lineNum: $message.\n+$line\n')
+
+
+    def __init__(self, basedir='', var_declarations=VAR_DECLARATIONS_SINGLE, verbose=False):
+        self.basedir = unicode(basedir, 'utf-8')
         self.errors = []
+        self.errorFiles = []
+        self.filesToCheck = []
         self.varDeclarations = var_declarations
         self.verbose = verbose
         self.sourcefile = None
@@ -223,7 +261,7 @@ class LintChecker(object):
                                 positions.append(match.start(i))
                                 break
 
-            self.error(check['error'], positions=positions)
+            self.error(check['error'], line=line, positions=positions)
 
 
     def next_statement(self, expect_line=False, check_line=True):
@@ -252,6 +290,9 @@ class LintChecker(object):
     def is_statement(self):
         # Skip empty lines
         if len(self.line.strip()) == 0:
+            if self.TRAILING_WHITESPACE_RE.match(self.line):
+                self.error('trailing whitespace')
+
             return False
 
         # See if we have a line comment, skip that
@@ -480,8 +521,8 @@ class LintChecker(object):
                         separator = separatorMatch.group('separator')
 
                         if blockHasSemicolon:
-                            # If the block already has a semicolon, we have an inadvertent global declaration
-                            self.error('inadvertent global variable')
+                            # If the block already has a semicolon, we have an accidental global declaration
+                            self.error('accidental global variable')
                         elif (separator == ';'):
                             blockHasSemicolon = True
                 elif match.group('separator'):
@@ -567,36 +608,75 @@ class LintChecker(object):
             check['action']()
 
 
-    def lint(self, filename):
-        self.filename = unicode(filename, 'utf-8')
-        fullpath = os.path.join(os.getcwd(), filename)
+    def lint(self, filesToCheck):
+        # Recursively walk any directories and eliminate duplicates
+        self.filesToCheck = []
 
-        try:
-            with open(fullpath) as self.sourcefile:
-                self.run_file_checks()
+        for filename in filesToCheck:
+            filename = unicode(filename, 'utf-8')
+            fullpath = os.path.join(self.basedir, filename)
 
-        except IOError, ex:
-            self.lineNum = 0
-            self.line = None
-            self.error('file not found')
+            if fullpath not in self.filesToCheck:
+                if os.path.isdir(fullpath):
+                    for root, dirs, files in os.walk(fullpath):
+                        for skipDir in self.DIRS_TO_SKIP:
+                            if skipDir in dirs:
+                                dirs.remove(skipDir)
 
-        except StopIteration:
-            if self.verbose:
-                print u'EOF\n'
-            pass
+                        for filename in files:
+                            if not filename.endswith('.j'):
+                                continue
+
+                            fullpath = os.path.join(root, filename)
+
+                            if fullpath not in self.filesToCheck:
+                                self.filesToCheck.append(fullpath)
+                else:
+                    self.filesToCheck.append(fullpath)
+
+        for filename in self.filesToCheck:
+            try:
+                with open(filename) as self.sourcefile:
+                    self.filename = relative_path(self.basedir, filename)
+                    self.run_file_checks()
+
+            except IOError, ex:
+                self.lineNum = 0
+                self.line = None
+                self.error('file not found')
+
+            except StopIteration:
+                if self.verbose:
+                    print u'EOF\n'
+                pass
+
+
+    def count_files_checked(self):
+        return len(self.filesToCheck)
 
 
     def error(self, message, **kwargs):
+        info = {
+            'filename':  self.filename,
+            'message':   message,
+        }
+
         line = kwargs.get('line', self.line)
         lineNum = kwargs.get('lineNum', self.lineNum)
-        self.errors.append(
-        {
-            'filename':  self.filename,
-            'lineNum':   lineNum,
-            'line':      tabs2spaces(line),
-            'message':   message,
-            'positions': kwargs.get('positions'),
-        })
+
+        if line and lineNum:
+            info['line'] = tabs2spaces(line)
+            info['lineNum'] = lineNum
+
+        positions = kwargs.get('positions')
+
+        if positions:
+            info['positions'] = positions
+
+        self.errors.append(info)
+
+        if self.filename not in self.errorFiles:
+            self.errorFiles.append(self.filename)
 
 
     def errors(self):
@@ -613,13 +693,29 @@ class LintChecker(object):
 
         if format == 'text':
             self.print_text_errors()
-        elif format == 'textmate':
-            self.print_textmate_errors()
+        elif format == 'html':
+            self.print_textmate_html_errors()
+        elif format == 'tooltip':
+            self.print_tooltip_errors()
+
 
     def print_text_errors(self):
+        sys.stdout.write('%d error' % len(self.errors))
+
+        if len(self.errors) > 1:
+            sys.stdout.write('s')
+
+        if len(self.filesToCheck) == 1:
+            template = self.TEXT_ERROR_SINGLE_FILE_TEMPLATE
+        else:
+            sys.stdout.write(' in %d files' % len(self.errorFiles))
+            template = self.TEXT_ERROR_MULTI_FILE_TEMPLATE
+
+        sys.stdout.write(':\n\n')
+
         for error in self.errors:
             if 'lineNum' in error and 'line' in error:
-                print Template(u'$filename:$lineNum: $message.\n+$line').substitute(error).encode('utf-8')
+                sys.stdout.write(template.substitute(error).encode('utf-8'))
 
                 if error.get('positions'):
                     markers = ' ' * len(error['line'])
@@ -629,57 +725,147 @@ class LintChecker(object):
 
                     # Add a space at the beginning of the markers to account for the '+' at the beginning
                     # of the source line.
-                    print ' ' + markers
+                    sys.stdout.write(' %s\n' % markers)
             else:
-                print '%s: %s.' % (filename, error)
+                sys.stdout.write('%s: %s.\n' % (error['filename'], error['message']))
 
-            print
+            sys.stdout.write('\n')
 
-    def print_textmate_errors(self):
-        print """
+
+    def print_textmate_html_errors(self):
+        html = """
 <html>
     <head>
         <title>Cappuccino Lint Report</title>
+        <style type="text/css">
+            body {
+                margin: 0px;
+                padding: 1px;
+            }
+
+            h1 {
+                font: bold 12pt "Lucida Grande";
+                color: #333;
+                background-color: #FF7880;
+                margin: 0 0 .5em 0;
+                padding: .25em .5em;
+            }
+
+            p, a {
+                margin: 0px;
+                padding: 0px;
+            }
+
+            p {
+                font: normal 10pt "Lucida Grande";
+                color: #000;
+            }
+
+            p.error {
+                background-color: #E2EAFF;
+            }
+
+            p.source {
+                font-family: Consolas, 'Bitstream Vera Sans Mono', Monoco, Courier, sans-serif;
+                white-space: pre;
+                background-color: #fff;
+                padding-bottom: 1em;
+            }
+
+            a {
+                display: block;
+                padding: .25em .5em;
+                text-decoration: none;
+                color: inherit;
+                background-color: inherit;
+            }
+
+            a:hover {
+                background-color: #ddd;
+            }
+
+            em {
+                font-weight: normal;
+                font-style: normal;
+                font-variant: normal;
+                background-color: #FF7880;
+            }
+        </style>
     </head>
-    <body>"""
+    <body>
+    """
+
+        html += '<h1>Results: %d error' % len(self.errors)
+
+        if len(self.errors) > 1:
+            html += 's'
+
+        if len(self.filesToCheck) > 1:
+            html += ' in %d files' % len(self.errorFiles)
+
+        html += '</h1>'
 
         for error in self.errors:
-            print "<div>"
+            message = cgi.escape(error['message'])
 
-            if 'lineNum' in error and 'line' in error:
-                first_column = (error.get('positions') or [0])[0]
-                error['filename'], error['lineNum'], first_column, error['message'], error['line']
-                abs_filename = os.path.abspath(error['filename'])
-                print '<a href="txmt://open/?url=file://%s&line=%d&column=%d">%s:%d:</a> %s.<br/><pre>+ %s</pre>' % (cgi.escape(abs_filename), error['lineNum'], first_column + 1, cgi.escape(error['filename']), error['lineNum'], cgi.escape(error['message']), cgi.escape(error['line']))
-
-                if error.get('positions'):
-                    print "</div><div><pre>",
-                    markers = ' ' * len(error['line'])
-
-                    for position in error['positions']:
-                        markers = markers[:position] + '^' + markers[position + 1:]
-
-                    # Add a space at the beginning of the markers to account for the '+' at the beginning
-                    # of the source line.
-                    print ' ' + markers
-
-                    print "</pre>"
+            if len(self.filesToCheck) > 1:
+                filename = cgi.escape(error['filename']) + ':'
             else:
-                print format_err(filename, error)
+                filename = ''
 
-            print "</div>"
+            html += '<p class="error">'
 
-        print """
+            if 'line' in error and 'lineNum' in error:
+                filepath = cgi.escape(os.path.join(self.basedir, error['filename']))
+                lineNum = error['lineNum']
+                line = error['line']
+                positions = error.get('positions')
+                firstPos = -1
+                source = ''
+
+                if positions:
+                    firstPos = positions[0] + 1
+                    lastPos = 0
+
+                    for pos in error.get('positions'):
+                        if pos < len(line):
+                            charToHighlight = line[pos]
+                        else:
+                            charToHighlight = ''
+
+                        source += '%s<em>%s</em>' % (cgi.escape(line[lastPos:pos]), cgi.escape(charToHighlight))
+                        lastPos = pos + 1
+
+                    if lastPos <= len(line):
+                        source += cgi.escape(line[lastPos:])
+
+                link = '<a href="txmt://open/?url=file://%s&line=%d&column=%d">' % (filepath, lineNum, firstPos)
+
+                if len(self.filesToCheck) > 1:
+                    errorMsg = '%s%d: %s' % (filename, lineNum, message)
+                else:
+                    errorMsg = '%d: %s' % (lineNum, message)
+
+                html += '%(link)s%(errorMsg)s</a></p>\n<p class="source">%(link)s%(source)s</a></p>\n' % { 'link':link, 'errorMsg':errorMsg, 'source':source }
+            else:
+                html += '%s%s</p>\n' % (filename, message)
+
+        html += """
     </body>
-</html>"""
+</html>
+"""
+        exit_show_html(html)
+
 
 if __name__ == '__main__':
     usage = 'usage: %prog [options] [file ... | -]'
     parser = OptionParser(usage=usage, version='1.02')
-    parser.add_option('--var-declarations', action='store', type='string', dest='var_declarations', default='single', help='set the policy for flagging consecutive var declarations')
+    parser.add_option('-f', '--format', action='store', type='string', dest='format', default='text', help='the format to use for the report: text (default) or html (HTML in which errors can be clicked on to view in TextMate)')
+    parser.add_option('-b', '--basedir', action='store', type='string', dest='basedir', help='the base directory relative to which filenames are resolved, defaults to the current working directory')
+    parser.add_option('-d', '--var-declarations', action='store', type='string', dest='var_declarations', default='single', help='set the policy for flagging consecutive var declarations (%s)' % ', '.join(LintChecker.VAR_DECLARATIONS))
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False, help='show what lint is doing')
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet', default=False, help='do not display errors, only return an exit code')
-    parser.add_option('-f', '--format', action='store', type='string', dest='format', default='text', help='the format to use for the report: text (default) or textmate (HTML in which errors can be clicked on to view in TextMate)')
+
     (options, args) = parser.parse_args()
 
     if options.var_declarations not in LintChecker.VAR_DECLARATIONS:
@@ -689,8 +875,20 @@ if __name__ == '__main__':
         parser.error('options -v/--verbose and -q/--quiet are mutually exclusive')
 
     options.format = options.format.lower()
-    if not options.format in ('text', 'textmate'):
-        parser.error('format must be either text or textmate')
+
+    if not options.format in LintChecker.ERROR_FORMATS:
+        parser.error('format must be one of ' + '/'.join(LintChecker.ERROR_FORMATS))
+
+    if options.format == 'html' and not within_textmate():
+        parser.error('html format can only be used within TextMate.')
+
+    if options.basedir:
+        basedir = options.basedir
+
+        if basedir[-1] == '/':
+            basedir = basedir[:-1]
+    else:
+        basedir = os.getcwd()
 
     # We accept a list of filenames (relative to the cwd) either from the command line or from stdin
     filenames = args
@@ -702,15 +900,34 @@ if __name__ == '__main__':
         print usage.replace('%prog', os.path.basename(sys.argv[0]))
         sys.exit(0)
 
-    checker = LintChecker(var_declarations=LintChecker.VAR_DECLARATIONS.index(options.var_declarations), verbose=options.verbose)
+    checker = LintChecker(basedir=basedir, var_declarations=LintChecker.VAR_DECLARATIONS.index(options.var_declarations), verbose=options.verbose)
+    pathsToCheck = []
 
     for filename in filenames:
-        if filename.endswith('.j'):
-            checker.lint(filename)
+        filename = filename.strip('"\'')
+        path = os.path.join(basedir, filename)
+
+        if (os.path.isdir(path) and not path.endswith('Frameworks')) or filename.endswith('.j'):
+            pathsToCheck.append(relative_path(basedir, filename))
+
+    if len(pathsToCheck) == 0:
+        if within_textmate():
+            exit_show_tooltip('No Objective-J files found.')
+        else:
+            if not options.quiet:
+                print 'No Objective-J files found.'
+
+            sys.exit(0)
+
+    checker.lint(pathsToCheck)
 
     if checker.has_errors():
         if not options.quiet:
             checker.print_errors(options.format)
+
         sys.exit(1)
     else:
+        if within_textmate():
+            exit_show_tooltip('Everything looks clean.')
+
         sys.exit(0)

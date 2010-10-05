@@ -9,13 +9,20 @@ DESCRIPTION
     common formatting mistakes, as defined in the Cappuccino coding style guidelines
     (http://cappuccino.org/contribute/coding-style.php).
 
-    capp_lint.py operates on a list of files. You may pass one or more filenames (relative to the
-    current working directory) as arguments to capp_lint.py, or if the first filename is "-", the
-    list of filenames is taken from stdin, in which case everything after the "-" is ignored.
+    capp_lint.py operates on a list of files and/or directory. You may pass one or more paths (relative to the
+    current working directory) as arguments to capp_lint.py, or if the first path is "-", the
+    list of paths is taken from stdin, in which case everything after the "-" is ignored.
+
+    If a path is a directory, the directory is recursively scanned for *.j files to check. Symbolic links
+    are not followed.
 
     The following options are available:
 
-    --var-declarations=[none|single|strict]
+    -b/--basedir=BASEDIR
+        The base directory relative to which filenames will be resolved. If not passed,
+        it defaults to the current working directory.
+
+    -d/--var-declarations=[none|single|strict]
         Determines the policy in flagging consecutive var declarations. The choices are:
             none - No checking is done.
             single - If two var blocks appear consecutively and one of them is
@@ -41,13 +48,17 @@ DESCRIPTION
 
         The "single" policy will flag this because the second block is a single declaration.
 
-    -v/--verbose
-        Displays each line as it is processed by capp_lint.py with a line number,
-        along with some information about syntactic information it finds.
+    -f/--format=[text|html]
+        Determines the format of the error output. See the OUTPUT section below for more information
+        on the different formats.
 
     -q/--quiet
         Normally capp_lint.py will print a list of the errors it finds. If this option is passed,
         the error list is suppressed. This option is mutually exclusive with the -v option.
+
+    -v/--verbose
+        Displays each line as it is processed by capp_lint.py with a line number,
+        along with some information about syntactic information it finds.
 
     --version
         Displays the current version and exits.
@@ -81,7 +92,7 @@ EXIT STATUS
 
 OUTPUT
     For each error that capp_lint.py finds, if the -q/--quiet option was not passed, capp_lint.py
-    will output an error like the following:
+    will output an error like the following if the error format is text:
 
     AppKit/CPObjectController.j:482: assignment operator without surrounding spaces.
     +    for (var i=0, count=[_observationProxies count]; i<count; i++)
@@ -89,7 +100,35 @@ OUTPUT
 
     The filename (relative to the working directory), line number, and type of error are displayed
     first, followed by the offending line of source code. When possible and necessary (as in this example),
-    the location of the errors is indicated below the source line.
+    the location of the errors is indicated below the source line. If only a single file was checked,
+    the filename is suppressed.
+
+    If the error format is html, the output is similar, but instead of using markers to indicate where
+    the errors occurred, the character at that position is highlighted. In addition, clicking on the
+    error open TextMate to the file and line number of the error.
+
+TEXTMATE INTEGRATION
+    To integrate capp_lint.py into TextMate, double-click capp_lint.tmbundle to install it into TextMate.
+    Before the bundle can be used, you must make capp_lint.py available to TextMate. The bundle will
+    look in the following places:
+
+    - capp_lint.tmbundle/Support/bin/capp_lint.py
+    - The path specified by the TextMate shell variable TM_CAPP_LINT (set in TextMate Preferences).
+      The path should include the filename of the executable file.
+    - capp_lint.py or capp_lint in your PATH.
+
+    The bundle has four commands, accessed by default by pressing Control-L:
+
+    - Check current document, show the results in HTML with clickable errors.
+    - Check current document, show the results in a tooltip.
+    - Recursively check the selected documents and/or directories in the project drawer.
+    - Recursively check the entire project.
+
+    VAR_DECLARATIONS POLICY
+    You can set a value for --var-declarations by creating and enabling the TextMate
+    shell variable TM_CAPP_LINT_VAR_DECLARATIONS in TextMate Preferences. The value should
+    be one of [none|single|strict]. If not set, the default policy is single.
+
 
 KNOWN BUGS
     capp_lint.py will currently flag false positives for the following cases I know of:
