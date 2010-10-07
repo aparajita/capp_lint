@@ -913,11 +913,8 @@ if __name__ == '__main__':
     if len(pathsToCheck) == 0:
         if within_textmate():
             exit_show_tooltip('No Objective-J files found.')
-        else:
-            if not options.quiet:
-                print 'No Objective-J files found.'
 
-            sys.exit(0)
+        sys.exit(0)
 
     checker.lint(pathsToCheck)
 
