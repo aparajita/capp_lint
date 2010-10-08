@@ -15,11 +15,11 @@ if [[ -z "$lintPath" ]]; then
     fi
 fi
 
-if [[ -z "$lintPath" && ! `which -s capp_lint.py` ]]; then
+if [[ -z "$lintPath" && `which capp_lint.py` ]]; then
     lintPath="`which capp_lint.py`"
 fi
 
-if [[ -z "$lintPath" && ! `which -s capp_lint` ]]; then
+if [[ -z "$lintPath" && `which capp_lint` ]]; then
     lintPath="`which capp_lint`"
 fi
 
