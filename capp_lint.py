@@ -289,11 +289,11 @@ class LintChecker(object):
                 if self.verbose:
                     print u'%d: %s' % (self.lineNum, tabs2spaces(self.line))
 
-                if not self.is_statement():
-                    continue
-
                 if check_line:
                     self.run_line_checks()
+
+                if not self.is_statement():
+                    continue
 
                 return True
 
@@ -306,9 +306,6 @@ class LintChecker(object):
     def is_statement(self):
         # Skip empty lines
         if len(self.line.strip()) == 0:
-            if self.TRAILING_WHITESPACE_RE.match(self.line):
-                self.error('trailing whitespace')
-
             return False
 
         # See if we have a line comment, skip that
@@ -854,6 +851,8 @@ class LintChecker(object):
 
                     if lastPos <= len(line):
                         source += cgi.escape(line[lastPos:])
+                else:
+                    source = line
 
                 link = '<a href="txmt://open/?url=file://%s&line=%d&column=%d">' % (filepath, lineNum, firstPos)
 
