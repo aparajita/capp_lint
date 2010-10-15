@@ -135,7 +135,10 @@ class LintChecker(object):
             'filter': { 'regex': re.compile(ur'(^@import\b|^\s*[-+]\s*\([a-zA-Z_$]\w*\)\s*[a-zA-Z_$]\w*|[a-zA-Z_$]\w*(\+\+|--)|([ -+*/%^&|<>!]=?|&&|\|\||<<|>>>|={1,3}|!==?)\s*[-+][\w(\[])'), 'pass': False },
 
             # Replace the contents of literal strings with spaces so we don't get false matches within them
-            'preprocess': { 'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION },
+            'preprocess': (
+                { 'regex': STRIP_LINE_COMMENT_RE, 'replace': '' },
+                { 'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION },
+            ),
             'regex':      re.compile(ur'(?<=[\w)\]"\']|([ ]))([-+*/%^]|&&?|\|\|?|<<|>>>?)(?=[\w({\["\']|(?(1)\b\b|[ ]))'),
             'error':      'binary operator without surrounding spaces',
             'showPositionForGroup': 2,
@@ -145,7 +148,10 @@ class LintChecker(object):
             'filter': { 'regex': re.compile(ur'(^@import\b|^\s*[-+]\s*\([a-zA-Z_$]\w*\)\s*[a-zA-Z_$]\w*)'), 'pass': False },
 
             # Replace the contents of literal strings with spaces so we don't get false matches within them
-            'preprocess': { 'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION },
+            'preprocess': (
+                { 'regex': STRIP_LINE_COMMENT_RE, 'replace': '' },
+                { 'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION },
+            ),
             'regex':      re.compile(ur'(?:[-*/%^&|<>!]=?|&&|\|\||<<|>>>|={1,3}|!==?)\s*(?<!\+)(\+)[\w(\[]'),
             'error':      'useless unary + operator',
             'showPositionForGroup': 1,
@@ -155,7 +161,10 @@ class LintChecker(object):
             'filter': { 'regex': re.compile(ur'^\s*(?:@outlet\s+)?[a-zA-Z_$]\w*\s+[a-zA-Z_$]\w*\s+@accessors\b'), 'pass': False },
 
             # Replace the contents of literal strings with spaces so we don't get false matches within them
-            'preprocess': { 'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION },
+            'preprocess': (
+                { 'regex': STRIP_LINE_COMMENT_RE, 'replace': '' },
+                { 'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION },
+            ),
             'regex':      re.compile(ur'(?<=[\w)\]"\']|([ ]))(=|[-+*/%^&|]=|<<=|>>>?=)(?=[\w({\["\']|(?(1)\b\b|[ ]))'),
             'error':      'assignment operator without surrounding spaces',
             'showPositionForGroup': 2,
@@ -165,7 +174,10 @@ class LintChecker(object):
             'filter': { 'regex': re.compile(ur'^(@import\b|@implementation\b|[-+]\s*\([a-zA-Z_$]\w*\)\s*[a-zA-Z_$]\w*)'), 'pass': False },
 
             # Replace the contents of literal strings with spaces so we don't get false matches within them
-            'preprocess': { 'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION },
+            'preprocess': (
+                { 'regex': STRIP_LINE_COMMENT_RE, 'replace': '' },
+                { 'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION },
+            ),
             'regex':      re.compile(ur'(?<=[\w)\]"\']|([ ]))(===?|!==?|[<>]=?)(?=[\w({\["\']|(?(1)\b\b|[ ]))'),
             'error':      'comparison operator without surrounding spaces',
             'showPositionForGroup': 2,
@@ -228,10 +240,14 @@ class LintChecker(object):
             preprocess = check.get('preprocess')
 
             if preprocess:
-                regex = preprocess.get('regex')
+                if not isinstance(preprocess, (list, tuple)):
+                    preprocess = (preprocess,)
 
-                if regex:
-                    line = regex.sub(preprocess.get('replace', ''), line)
+                for processor in preprocess:
+                    regex = processor.get('regex')
+
+                    if regex:
+                        line = regex.sub(processor.get('replace', ''), line)
 
             regex = check.get('regex')
 
