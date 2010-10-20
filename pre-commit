@@ -59,6 +59,12 @@ if test "$(git diff --cached --name-only --diff-filter=A -z $against |
 '"$(git diff --cached --name-only --diff-filter=A $against)"
 fi
 
+# Check for trailing whitespaces, indents that uses a space before a tab and leftover conflict markers
+if test "$(git diff-index --check --cached $against --)"; then
+    die 'Unresolved files may not be added:
+'"$(git diff-index --check --cached $against --)"
+fi
+
 #-----------------------------------------------------------------------------
 # Check for inadvertent globals and dangling variable declarations.
 
