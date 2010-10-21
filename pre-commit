@@ -61,7 +61,7 @@ fi
 
 # Check for trailing whitespaces, indents that uses a space before a tab and leftover conflict markers
 if test "$(git diff-index --check --cached $against --)"; then
-    die 'Unresolved files may not be added:
+    die 'The following whitespace errors or unresolved conflicts have been found:
 '"$(git diff-index --check --cached $against --)"
 fi
 
