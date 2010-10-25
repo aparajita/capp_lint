@@ -85,6 +85,7 @@ DESCRIPTION
     - Inadvertent global variables in a var block.
     - Unbalanced [, { or ( in a variable block.
     - Opening braces on the same line as their control statement.
+    - Code following a var block that is not outdented from the var block.
 
 EXIT STATUS
     If capp_lint.py exits with a return status of one if it finds any errors. If no errors are found,
@@ -106,6 +107,12 @@ OUTPUT
     If the error format is html, the output is similar, but instead of using markers to indicate where
     the errors occurred, the character at that position is highlighted. In addition, clicking on the
     error open TextMate to the file and line number of the error.
+
+WHITESPACE
+    Cappuccino coding standards stipulate that there should be no trailing whitespace, and that tabs
+    should consist of 4 spaces, not tab characters. capp_lint will report trailing whitespace and hard tabs.
+    You should fix those errors before paying attention to any other errors, as the presence of hard tabs
+    may cause some false positives.
 
 TEXTMATE INTEGRATION
     To integrate capp_lint.py into TextMate, double-click capp_lint.tmbundle to install it into TextMate.

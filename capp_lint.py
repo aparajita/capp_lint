@@ -94,6 +94,10 @@ class LintChecker(object):
         )
     '''
 
+    STATEMENT_RE = re.compile(ur'''(?x)
+        \s*((continue|do|for|function|if|else|return|switch|while|with)\b|\[+\s*[a-zA-Z_$]\w*\s+[a-zA-Z_$]\w*\s*[:\]])
+    ''')
+
     TRAILING_WHITESPACE_RE = re.compile(ur'^.*(\s+)$')
     STRIP_LINE_COMMENT_RE = re.compile(ur'(.*)\s*(?://.*|/\*.*\*/\s*)$')
     LINE_COMMENT_RE = re.compile(ur'\s*(?:/\*.*\*/\s*|//.*)$')
@@ -325,6 +329,11 @@ class LintChecker(object):
         return True
 
 
+    def is_expression(self):
+        match = self.STATEMENT_RE.match(self.line)
+        return match is None
+
+
     def strip_comment(self):
         match = self.STRIP_LINE_COMMENT_RE.match(self.expression)
 
@@ -462,6 +471,11 @@ class LintChecker(object):
 
 
     def var_block(self, blockMatch):
+        """
+        Parse a var block, return a tuple (haveLine, isSingleVar), where haveLine
+        indicates whether self.line is the next line to be parsed.
+        """
+
         # Keep track of whether this var block has multiple declarations
         isSingleVar = True
 
@@ -511,37 +525,42 @@ class LintChecker(object):
             match = blockRE.match(self.line)
 
             if match:
-                lastBlockLine = self.line
-                lastBlockLineNum = self.lineNum
+                if self.is_expression():
+                    lastBlockLine = self.line
+                    lastBlockLineNum = self.lineNum
 
-                # If the line is indented farther than the first identifier in the block,
-                # it is considered a formatting error.
-                if match.group('indent') and not match.group('indented_expression'):
-                    self.error('incorrect indentation')
+                    # If the line is indented farther than the first identifier in the block,
+                    # it is considered a formatting error.
+                    if match.group('indent') and not match.group('indented_expression'):
+                        self.error('incorrect indentation')
 
-                self.get_expression(match)
+                    self.get_expression(match)
 
-                if not self.pairs_balanced(match):
-                    return (False, isSingleVar)
+                    if not self.pairs_balanced(match):
+                        return (False, isSingleVar)
 
-                if self.expression:
-                    separatorMatch = self.SEPARATOR_RE.match(self.expression)
+                    if self.expression:
+                        separatorMatch = self.SEPARATOR_RE.match(self.expression)
 
-                    if separatorMatch is None:
-                        # If the assignment does not have a separator, it's an error
-                        self.error('missing statement separator')
-                    else:
-                        separator = separatorMatch.group('separator')
+                        if separatorMatch is None:
+                            # If the assignment does not have a separator, it's an error
+                            self.error('missing statement separator')
+                        else:
+                            separator = separatorMatch.group('separator')
 
-                        if blockHasSemicolon:
-                            # If the block already has a semicolon, we have an accidental global declaration
-                            self.error('accidental global variable')
-                        elif (separator == ';'):
-                            blockHasSemicolon = True
-                elif match.group('separator'):
-                    separator = match.group('separator')
+                            if blockHasSemicolon:
+                                # If the block already has a semicolon, we have an accidental global declaration
+                                self.error('accidental global variable')
+                            elif (separator == ';'):
+                                blockHasSemicolon = True
+                    elif match.group('separator'):
+                        separator = match.group('separator')
 
-                isSingleVar = False
+                    isSingleVar = False
+                else:
+                    # If the line is a control statement of some kind, then it should not be indented this far.
+                    self.error('statement should be outdented from preceding var block')
+                    return (True, False)
 
             else:
                 # If the line does not match, it is not an assignment or is outdented from the block.
