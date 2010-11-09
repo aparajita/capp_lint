@@ -71,8 +71,29 @@ fi
 fileCount=`git diff --cached --name-only --diff-filter=AM $against | wc -l`
 
 if [[ fileCount -ne "0" ]]; then
-    dir=`dirname $0`
-    git diff --cached --name-only --diff-filter=AM $against | "$dir"/capp_lint.py - > /tmp/capp_lint.tmp
+    lintPath=''
+
+    if [[ `which capp_lint.py` ]]; then
+        lintPath="`which capp_lint.py`"
+    fi
+
+    if [[ -z "$lintPath" && `which capp_lint` ]]; then
+        lintPath="`which capp_lint`"
+    fi
+
+    if [[ -z "$lintPath" ]]; then
+        path=`dirname $0`/capp_lint.py
+
+        if [[ -x "$path" ]]; then
+            lintPath="$path"
+        fi
+    fi
+
+    if [[ -z "$lintPath" ]]; then
+        die 'Could not find capp_lint or capp_lint.py in your PATH or in .git/hooks.'
+    fi
+
+    git diff --cached --name-only --diff-filter=AM $against | "$lintPath" - > /tmp/capp_lint.tmp
 
     if [ -s /tmp/capp_lint.tmp ]; then
         die 'The following lint errors were found:
