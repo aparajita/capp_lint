@@ -71,7 +71,8 @@ fi
 fileCount=`git diff --cached --name-only --diff-filter=AM $against | wc -l`
 
 if [[ fileCount -ne "0" ]]; then
-    git diff --cached --name-only --diff-filter=AM $against | capp_lint.py - > /tmp/capp_lint.tmp
+    dir=`dirname $0`
+    git diff --cached --name-only --diff-filter=AM $against | "$dir"/capp_lint.py - > /tmp/capp_lint.tmp
 
     if [ -s /tmp/capp_lint.tmp ]; then
         die 'The following lint errors were found:
