@@ -84,11 +84,11 @@ DESCRIPTION
     - Missing statement separators in a var block.
     - Inadvertent global variables in a var block.
     - Unbalanced [, { or ( in a variable block.
-    - Opening braces on the same line as their control statement.
+    - Opening braces on the same line as a statement.
     - Code following a var block that is not outdented from the var block.
 
 EXIT STATUS
-    If capp_lint.py exits with a return status of one if it finds any errors. If no errors are found,
+    capp_lint.py exits with a return status of one if it finds any errors. If no errors are found,
     it exits with a return status of zero.
 
 OUTPUT
@@ -151,3 +151,7 @@ KNOWN BUGS
 
     - unterminated var block. This is not actually a bug -- multiple variables are not supposed
       to be declared on a single line. The error condition is not properly described.
+
+AUTHORS
+    Aparajita Fishman, Victory-Heart Productions
+    aparajita@aparajita.com
