@@ -192,6 +192,12 @@ class LintChecker(object):
             'showPositionForGroup': 0,
         },
         {
+            # Check for brace following a class or method declaration
+            'regex': re.compile(ur'^(?:\s*[-+]\s*\([a-zA-Z_$]\w*\)|@implementation)\s*[a-zA-Z_$]\w*.*?\s*(\{)\s*(?:$|//.*$)'),
+            'error': 'braces should be on their own line',
+            'showPositionForGroup': 0,
+        },
+        {
             'regex': re.compile(ur'^\s*var\s+[a-zA-Z_$]\w*\s*=\s*function\s+([a-zA-Z_$]\w*)\s*\('),
             'error': 'function name is ignored',
             'showPositionForGroup': 1,
