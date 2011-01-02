@@ -293,8 +293,15 @@ class LintChecker(object):
     def next_statement(self, expect_line=False, check_line=True):
         try:
             while True:
-                self.line = unicode(self.sourcefile.next()[:-1], 'utf-8', 'strict')  # strip EOL, convert to Unicode
-                self.lineNum += 1
+                raw_line = self.sourcefile.next()[:-1] # strip EOL
+
+                try:
+                    self.line = unicode(raw_line, 'utf-8', 'strict')  # convert to Unicode
+                    self.lineNum += 1
+                except UnicodeDecodeError:
+                    self.line = unicode(raw_line, 'utf-8', 'replace')
+                    self.lineNum += 1
+                    self.error('line contains invalid unicode character(s)')
 
                 if self.verbose:
                     print u'%d: %s' % (self.lineNum, tabs2spaces(self.line))
@@ -306,7 +313,6 @@ class LintChecker(object):
                     continue
 
                 return True
-
         except StopIteration:
             if expect_line:
                 self.error('unexpected EOF')
