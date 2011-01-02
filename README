@@ -70,6 +70,7 @@ DESCRIPTION
 
     - Lines which contain one or more tabs.
     - Lines which contain non-ASCII characters not within quoted strings.
+    - Lines which contain malformed UTF-8.
     - Missing space between control statements and their opening parentheses.
     - Trailing whitespace.
     - Binary operators without surrounding space.
