@@ -103,6 +103,7 @@ class LintChecker(object):
     LINE_COMMENT_RE = re.compile(ur'\s*(?:/\*.*\*/\s*|//.*)$')
     BLOCK_COMMENT_START_RE = re.compile(ur'\s*/\*.*(?!\*/\s*)$')
     BLOCK_COMMENT_END_RE = re.compile(ur'.*?\*/')
+    METHOD_RE = ur'[-+]\s*\([a-zA-Z_$]\w*\)\s*[a-zA-Z_$]\w*'
     FUNCTION_RE = re.compile(ur'\s*function\s*(?P<name>[a-zA-Z_$]\w*)?\(.*\)\s*\{?')
     STRING_LITERAL_RE = re.compile(ur'(?<!\\)(["\'])(.*?)(?<!\\)\1')
     EMPTY_STRING_LITERAL_FUNCTION = lambda match: match.group(1) + (len(match.group(2)) * ' ') + match.group(1)
@@ -135,8 +136,8 @@ class LintChecker(object):
             'showPositionForGroup': 1,
         },
         {
-            # Filter out @import statements, method declarations, unary plus/minus/increment/decrement
-            'filter': { 'regex': re.compile(ur'(^@import\b|^\s*[-+]\s*\([a-zA-Z_$]\w*\)\s*[a-zA-Z_$]\w*|[a-zA-Z_$]\w*(\+\+|--)|([ -+*/%^&|<>!]=?|&&|\|\||<<|>>>|={1,3}|!==?)\s*[-+][\w(\[])'), 'pass': False },
+            # Filter out @import statements, method declarations, method parameters, unary plus/minus/increment/decrement
+            'filter': { 'regex': re.compile(ur'(^@import\b|^\s*' + METHOD_RE + '|^\s*[a-zA-Z_$]\w*:\s*\([a-zA-Z_$][\w<>]*\)\s*\w+|[a-zA-Z_$]\w*(\+\+|--)|([ -+*/%^&|<>!]=?|&&|\|\||<<|>>>|={1,3}|!==?)\s*[-+][\w(\[])'), 'pass': False },
 
             # Replace the contents of literal strings with spaces so we don't get false matches within them
             'preprocess': (
@@ -149,7 +150,7 @@ class LintChecker(object):
         },
         {
             # Filter out @import statements, method declarations
-            'filter': { 'regex': re.compile(ur'(^@import\b|^\s*[-+]\s*\([a-zA-Z_$]\w*\)\s*[a-zA-Z_$]\w*)'), 'pass': False },
+            'filter': { 'regex': re.compile(ur'^(@import\b|\s*' + METHOD_RE + ')'), 'pass': False },
 
             # Replace the contents of literal strings with spaces so we don't get false matches within them
             'preprocess': (
@@ -175,7 +176,7 @@ class LintChecker(object):
         },
         {
             # Filter out @import statements and @implementation/method declarations
-            'filter': { 'regex': re.compile(ur'^(@import\b|@implementation\b|[-+]\s*\([a-zA-Z_$]\w*\)\s*[a-zA-Z_$]\w*)'), 'pass': False },
+            'filter': { 'regex': re.compile(ur'^(@import\b|@implementation\b|\s*' + METHOD_RE + ')'), 'pass': False },
 
             # Replace the contents of literal strings with spaces so we don't get false matches within them
             'preprocess': (
@@ -187,13 +188,13 @@ class LintChecker(object):
             'showPositionForGroup': 2,
         },
         {
-            'regex': re.compile(ur'^(\s+)[-+]\s*\([a-zA-Z_$]\w*\)\s*[a-zA-Z_$]\w*|^\s*[-+](\()[a-zA-Z_$]\w*\)\s*[a-zA-Z_$]\w*|^\s*[-+]\s*\([a-zA-Z_$]\w*\)(\s+)[a-zA-Z_$]\w*'),
+            'regex': re.compile(ur'^(\s+)' + METHOD_RE + '|^\s*[-+](\()[a-zA-Z_$][\w]*\)\s*[a-zA-Z_$]\w*|^\s*[-+]\s*\([a-zA-Z_$][\w]*\)(\s+)[a-zA-Z_$]\w*'),
             'error': 'extra or missing space in a method declaration',
             'showPositionForGroup': 0,
         },
         {
             # Check for brace following a class or method declaration
-            'regex': re.compile(ur'^(?:\s*[-+]\s*\([a-zA-Z_$]\w*\)|@implementation)\s*[a-zA-Z_$]\w*.*?\s*(\{)\s*(?:$|//.*$)'),
+            'regex': re.compile(ur'^(?:\s*[-+]\s*\([a-zA-Z_$]\w*\)|@implementation)\s*[a-zA-Z_$][\w]*.*?\s*(\{)\s*(?:$|//.*$)'),
             'error': 'braces should be on their own line',
             'showPositionForGroup': 0,
         },
