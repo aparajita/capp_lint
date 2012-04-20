@@ -1,14 +1,41 @@
 #!/usr/bin/env python
+#
+# capp_lint.py - Check Objective-J source code formatting,
+# according to Cappuccino standards:
+#
+# http://cappuccino.org/contribute/coding-style.php
+#
+# Copyright (C) 2011 Aparajita Fishman <aparajita@aparajita.com>
+
+# Permission is hereby granted, free of charge, to any person
+# obtaining a copy of this software and associated documentation files
+# (the "Software"), to deal in the Software without restriction,
+# including without limitation the rights to use, copy, modify, merge,
+# publish, distribute, sublicense, and/or sell copies of the Software,
+# and to permit persons to whom the Software is furnished to do so,
+# subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+# BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+# ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
 
 from __future__ import with_statement
 from optparse import OptionParser
 from string import Template
 import cgi
+import cStringIO
 import os
 import os.path
 import re
 import sys
-import unicodedata
 
 
 EXIT_CODE_SHOW_HTML = 205
@@ -106,108 +133,118 @@ class LintChecker(object):
     METHOD_RE = ur'[-+]\s*\([a-zA-Z_$]\w*\)\s*[a-zA-Z_$]\w*'
     FUNCTION_RE = re.compile(ur'\s*function\s*(?P<name>[a-zA-Z_$]\w*)?\(.*\)\s*\{?')
     STRING_LITERAL_RE = re.compile(ur'(?<!\\)(["\'])(.*?)(?<!\\)\1')
+    RE_RE = re.compile(ur'(?<!\\)/.*?[^\\]/[gims]*')
     EMPTY_STRING_LITERAL_FUNCTION = lambda match: match.group(1) + (len(match.group(2)) * ' ') + match.group(1)
     EMPTY_SELF_STRING_LITERAL_FUNCTION = lambda self, match: match.group(1) + (len(match.group(2)) * ' ') + match.group(1)
+
+    ERROR_TYPE_ILLEGAL = 1
+    ERROR_TYPE_WARNING = 2
+
+    # Replace the contents of comments, regex and string literals
+    # with spaces so we don't get false matches within them
+    STD_IGNORES = (
+        {'regex': STRIP_LINE_COMMENT_RE, 'replace': ''},
+        {'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION},
+        {'regex': RE_RE, 'replace': '/ /'},
+    )
 
     LINE_CHECKLIST = (
         {
             'id': 'tabs',
             'regex': re.compile(ur'[\t]'),
             'error': 'line contains tabs',
+            'type': ERROR_TYPE_ILLEGAL
         },
         {
             'regex': re.compile(ur'([^\t -~])'),
             'error': 'line contains non-ASCII characters',
             'showPositionForGroup': 1,
+            'type': ERROR_TYPE_ILLEGAL,
+            'option': 'sublimelinter_objj_check_ascii',
+            'optionDefault': False
         },
         {
             'regex': re.compile(ur'^\s*(?:(?:else )?if|for|switch|while|with)(\()'),
             'error': 'missing space between control statement and parentheses',
             'showPositionForGroup': 1,
+            'type': ERROR_TYPE_WARNING
         },
         {
             'regex': re.compile(ur'^\s*(?:(?:else )?if|for|switch|while|with)\s*\(.+\)\s*(\{)\s*(?://.*|/\*.*\*/\s*)?$'),
             'error': 'braces should be on their own line',
             'showPositionForGroup': 1,
+            'type': ERROR_TYPE_ILLEGAL
         },
         {
             'regex': TRAILING_WHITESPACE_RE,
             'error': 'trailing whitespace',
             'showPositionForGroup': 1,
+            'type': ERROR_TYPE_ILLEGAL
         },
         {
             # Filter out @import statements, method declarations, method parameters, unary plus/minus/increment/decrement
-            'filter': { 'regex': re.compile(ur'(^@import\b|^\s*' + METHOD_RE + '|^\s*[a-zA-Z_$]\w*:\s*\([a-zA-Z_$][\w<>]*\)\s*\w+|[a-zA-Z_$]\w*(\+\+|--)|([ -+*/%^&|<>!]=?|&&|\|\||<<|>>>|={1,3}|!==?)\s*[-+][\w(\[])'), 'pass': False },
+            'filter': {'regex': re.compile(ur'(^@import\b|^\s*' + METHOD_RE + '|^\s*[a-zA-Z_$]\w*:\s*\([a-zA-Z_$][\w<>]*\)\s*\w+|[a-zA-Z_$]\w*(\+\+|--)|([ -+*/%^&|<>!]=?|&&|\|\||<<|>>>|={1,3}|!==?)\s*[-+][\w(\[])'), 'pass': False},
 
-            # Replace the contents of literal strings with spaces so we don't get false matches within them
-            'preprocess': (
-                { 'regex': STRIP_LINE_COMMENT_RE, 'replace': '' },
-                { 'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION },
-            ),
+            'preprocess': STD_IGNORES,
             'regex':      re.compile(ur'(?<=[\w)\]"\']|([ ]))([-+*/%^]|&&?|\|\|?|<<|>>>?)(?=[\w({\["\']|(?(1)\b\b|[ ]))'),
             'error':      'binary operator without surrounding spaces',
             'showPositionForGroup': 2,
+            'type': ERROR_TYPE_WARNING
         },
         {
             # Filter out @import statements, method declarations
-            'filter': { 'regex': re.compile(ur'^(@import\b|\s*' + METHOD_RE + ')'), 'pass': False },
+            'filter': {'regex': re.compile(ur'^(@import\b|\s*' + METHOD_RE + ')'), 'pass': False},
 
-            # Replace the contents of literal strings with spaces so we don't get false matches within them
-            'preprocess': (
-                { 'regex': STRIP_LINE_COMMENT_RE, 'replace': '' },
-                { 'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION },
-            ),
+            'preprocess': STD_IGNORES,
             'regex':      re.compile(ur'(?:[-*/%^&|<>!]=?|&&|\|\||<<|>>>|={1,3}|!==?)\s*(?<!\+)(\+)[\w(\[]'),
             'error':      'useless unary + operator',
             'showPositionForGroup': 1,
+            'type': ERROR_TYPE_WARNING
         },
         {
             # Filter out possible = within @accessors
-            'filter': { 'regex': re.compile(ur'^\s*(?:@outlet\s+)?[a-zA-Z_$]\w*\s+[a-zA-Z_$]\w*\s+@accessors\b'), 'pass': False },
+            'filter': {'regex': re.compile(ur'^\s*(?:@outlet\s+)?[a-zA-Z_$]\w*\s+[a-zA-Z_$]\w*\s+@accessors\b'), 'pass': False},
 
-            # Replace the contents of literal strings with spaces so we don't get false matches within them
-            'preprocess': (
-                { 'regex': STRIP_LINE_COMMENT_RE, 'replace': '' },
-                { 'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION },
-            ),
+            'preprocess': STD_IGNORES,
             'regex':      re.compile(ur'(?<=[\w)\]"\']|([ ]))(=|[-+*/%^&|]=|<<=|>>>?=)(?=[\w({\["\']|(?(1)\b\b|[ ]))'),
             'error':      'assignment operator without surrounding spaces',
             'showPositionForGroup': 2,
+            'type': ERROR_TYPE_WARNING
         },
         {
             # Filter out @import statements and @implementation/method declarations
-            'filter': { 'regex': re.compile(ur'^(@import\b|@implementation\b|\s*' + METHOD_RE + ')'), 'pass': False },
+            'filter': {'regex': re.compile(ur'^(@import\b|@implementation\b|\s*' + METHOD_RE + ')'), 'pass': False},
 
-            # Replace the contents of literal strings with spaces so we don't get false matches within them
-            'preprocess': (
-                { 'regex': STRIP_LINE_COMMENT_RE, 'replace': '' },
-                { 'regex': STRING_LITERAL_RE, 'replace': EMPTY_STRING_LITERAL_FUNCTION },
-            ),
+            'preprocess': STD_IGNORES,
             'regex':      re.compile(ur'(?<=[\w)\]"\']|([ ]))(===?|!==?|[<>]=?)(?=[\w({\["\']|(?(1)\b\b|[ ]))'),
             'error':      'comparison operator without surrounding spaces',
             'showPositionForGroup': 2,
+            'type': ERROR_TYPE_WARNING
         },
         {
             'regex': re.compile(ur'^(\s+)' + METHOD_RE + '|^\s*[-+](\()[a-zA-Z_$][\w]*\)\s*[a-zA-Z_$]\w*|^\s*[-+]\s*\([a-zA-Z_$][\w]*\)(\s+)[a-zA-Z_$]\w*'),
             'error': 'extra or missing space in a method declaration',
             'showPositionForGroup': 0,
+            'type': ERROR_TYPE_WARNING
         },
         {
             # Check for brace following a class or method declaration
             'regex': re.compile(ur'^(?:\s*[-+]\s*\([a-zA-Z_$]\w*\)|@implementation)\s*[a-zA-Z_$][\w]*.*?\s*(\{)\s*(?:$|//.*$)'),
             'error': 'braces should be on their own line',
             'showPositionForGroup': 0,
+            'type': ERROR_TYPE_ILLEGAL
         },
         {
             'regex': re.compile(ur'^\s*var\s+[a-zA-Z_$]\w*\s*=\s*function\s+([a-zA-Z_$]\w*)\s*\('),
             'error': 'function name is ignored',
             'showPositionForGroup': 1,
-            'skip' : True
+            'skip': True,
+            'type': ERROR_TYPE_WARNING
         },
     )
 
-    VAR_DECLARATIONS        = ['none', 'single', 'strict']
-    VAR_DECLARATIONS_NONE   = 0
+    VAR_DECLARATIONS = ['none', 'single', 'strict']
+    VAR_DECLARATIONS_NONE = 0
     VAR_DECLARATIONS_SINGLE = 1
     VAR_DECLARATIONS_STRICT = 2
 
@@ -217,8 +254,8 @@ class LintChecker(object):
     TEXT_ERROR_SINGLE_FILE_TEMPLATE = Template(u'$lineNum: $message.\n+$line\n')
     TEXT_ERROR_MULTI_FILE_TEMPLATE = Template(u'$filename:$lineNum: $message.\n+$line\n')
 
-
-    def __init__(self, basedir='', var_declarations=VAR_DECLARATIONS_SINGLE, verbose=False):
+    def __init__(self, view, basedir='', var_declarations=VAR_DECLARATIONS_SINGLE, verbose=False):
+        self.view = view
         self.basedir = unicode(basedir, 'utf-8')
         self.errors = []
         self.errorFiles = []
@@ -233,12 +270,19 @@ class LintChecker(object):
         self.identifierIndent = u''
 
         self.fileChecklist = (
-            { 'title': 'Check variable blocks', 'action': self.check_var_blocks },
+            {'title': 'Check variable blocks', 'action': self.check_var_blocks},
         )
-
 
     def run_line_checks(self):
         for check in self.LINE_CHECKLIST:
+            option = check.get('option')
+
+            if option:
+                default = check.get('optionDefault', False)
+
+                if not self.view.settings().get(option, default):
+                    continue
+
             line = self.line
             lineFilter = check.get('filter')
 
@@ -288,13 +332,12 @@ class LintChecker(object):
                                 positions.append(match.start(i))
                                 break
 
-            self.error(check['error'], line=line, positions=positions)
-
+            self.error(check['error'], line=line, positions=positions, type=check['type'])
 
     def next_statement(self, expect_line=False, check_line=True):
         try:
             while True:
-                raw_line = self.sourcefile.next()[:-1] # strip EOL
+                raw_line = self.sourcefile.next()[:-1]  # strip EOL
 
                 try:
                     self.line = unicode(raw_line, 'utf-8', 'strict')  # convert to Unicode
@@ -302,7 +345,7 @@ class LintChecker(object):
                 except UnicodeDecodeError:
                     self.line = unicode(raw_line, 'utf-8', 'replace')
                     self.lineNum += 1
-                    self.error('line contains invalid unicode character(s)')
+                    self.error('line contains invalid unicode character(s)', type=self.ERROR_TYPE_ILLEGAL)
 
                 if self.verbose:
                     print u'%d: %s' % (self.lineNum, tabs2spaces(self.line))
@@ -316,9 +359,8 @@ class LintChecker(object):
                 return True
         except StopIteration:
             if expect_line:
-                self.error('unexpected EOF')
+                self.error('unexpected EOF', type=self.ERROR_TYPE_ILLEGAL)
             raise
-
 
     def is_statement(self):
         # Skip empty lines
@@ -341,18 +383,15 @@ class LintChecker(object):
 
         return True
 
-
     def is_expression(self):
         match = self.STATEMENT_RE.match(self.line)
         return match is None
-
 
     def strip_comment(self):
         match = self.STRIP_LINE_COMMENT_RE.match(self.expression)
 
         if match:
             self.expression = match.group(1)
-
 
     def get_expression(self, lineMatch):
         groupdict = lineMatch.groupdict()
@@ -376,7 +415,6 @@ class LintChecker(object):
         self.strip_comment()
         self.expression = self.expression.strip()
 
-
     def block_comment(self):
         'Find the end of a block comment'
 
@@ -397,7 +435,6 @@ class LintChecker(object):
 
         if self.verbose:
             print u'%d: BLOCK COMMENT END' % self.lineNum
-
 
     def balance_pairs(self, squareOpenCount, curlyOpenCount, parenOpenCount):
         # The following lines have to be indented at least as much as the first identifier
@@ -423,7 +460,7 @@ class LintChecker(object):
                 if parenOpenCount:
                     unterminated.append('(')
 
-                self.error('unbalanced %s' % ' and '.join(unterminated))
+                self.error('unbalanced %s' % ' and '.join(unterminated), type=self.ERROR_TYPE_ILLEGAL)
                 return False
 
             self.next_statement(expect_line=True)
@@ -454,17 +491,16 @@ class LintChecker(object):
                 match = self.SEPARATOR_RE.match(self.expression)
 
                 if not match:
-                    self.error('missing statement separator')
+                    self.error('missing statement separator', type=self.ERROR_TYPE_ILLEGAL)
                     return False
 
                 return True
-
 
     def pairs_balanced(self, lineMatchOrBlockMatch):
 
         groups = lineMatchOrBlockMatch.groupdict()
 
-        if groups.has_key('assignment') or groups.has_key('bracket'):
+        if 'assignment' in groups or 'bracket' in groups:
             squareOpenCount = self.expression.count('[')
             squareOpenCount -= self.expression.count(']')
 
@@ -481,7 +517,6 @@ class LintChecker(object):
                     return False
 
         return True
-
 
     def var_block(self, blockMatch):
         """
@@ -511,7 +546,7 @@ class LintChecker(object):
             match = self.SEPARATOR_RE.match(self.expression)
 
             if not match:
-                self.error('missing statement separator')
+                self.error('missing statement separator', type=self.ERROR_TYPE_ILLEGAL)
             else:
                 separator = match.group('separator')
         elif blockMatch.group('separator'):
@@ -557,13 +592,13 @@ class LintChecker(object):
 
                         if separatorMatch is None:
                             # If the assignment does not have a separator, it's an error
-                            self.error('missing statement separator')
+                            self.error('missing statement separator', type=self.ERROR_TYPE_ILLEGAL)
                         else:
                             separator = separatorMatch.group('separator')
 
                             if blockHasSemicolon:
                                 # If the block already has a semicolon, we have an accidental global declaration
-                                self.error('accidental global variable')
+                                self.error('accidental global variable', type=self.ERROR_TYPE_ILLEGAL)
                             elif (separator == ';'):
                                 blockHasSemicolon = True
                     elif match.group('separator'):
@@ -580,10 +615,9 @@ class LintChecker(object):
                 # In either case, the block is considered closed. If the most recent separator was not ';',
                 # the block was not properly terminated.
                 if separator != ';':
-                    self.error('unterminated var block', lineNum=lastBlockLineNum, line=lastBlockLine)
+                    self.error('unterminated var block', lineNum=lastBlockLineNum, line=lastBlockLine, type=self.ERROR_TYPE_ILLEGAL)
 
                 return (True, isSingleVar)
-
 
     def check_var_blocks(self):
         lastStatementWasVar = False
@@ -641,7 +675,6 @@ class LintChecker(object):
             lastStatementWasVar = True
             lastVarWasSingle = isSingleVar
 
-
     def run_file_checks(self):
         for check in self.fileChecklist:
             self.sourcefile.seek(0)
@@ -651,7 +684,6 @@ class LintChecker(object):
                 print u'%s: %s' % (check['title'], self.sourcefile.name)
 
             check['action']()
-
 
     def lint(self, filesToCheck):
         # Recursively walk any directories and eliminate duplicates
@@ -685,25 +717,36 @@ class LintChecker(object):
                     self.filename = relative_path(self.basedir, filename)
                     self.run_file_checks()
 
-            except IOError, ex:
+            except IOError:
                 self.lineNum = 0
                 self.line = None
-                self.error('file not found')
+                self.error('file not found', type=self.ERROR_TYPE_ILLEGAL)
 
             except StopIteration:
                 if self.verbose:
                     print u'EOF\n'
                 pass
 
+    def lint_text(self, text, filename):
+        self.filename = filename
+        self.filesToCheck = []
+
+        try:
+            self.sourcefile = cStringIO.StringIO(text)
+            self.run_file_checks()
+        except StopIteration:
+            if self.verbose:
+                print u'EOF\n'
+            pass
 
     def count_files_checked(self):
         return len(self.filesToCheck)
-
 
     def error(self, message, **kwargs):
         info = {
             'filename':  self.filename,
             'message':   message,
+            'type':      kwargs.get('type', self.ERROR_TYPE_WARNING)
         }
 
         line = kwargs.get('line', self.line)
@@ -723,14 +766,8 @@ class LintChecker(object):
         if self.filename not in self.errorFiles:
             self.errorFiles.append(self.filename)
 
-
-    def errors(self):
-        return self.errors
-
-
     def has_errors(self):
         return len(self.errors) != 0
-
 
     def print_errors(self, format='text'):
         if not self.errors:
@@ -742,7 +779,6 @@ class LintChecker(object):
             self.print_textmate_html_errors()
         elif format == 'tooltip':
             self.print_tooltip_errors()
-
 
     def print_text_errors(self):
         sys.stdout.write('%d error' % len(self.errors))
@@ -775,7 +811,6 @@ class LintChecker(object):
                 sys.stdout.write('%s: %s.\n' % (error['filename'], error['message']))
 
             sys.stdout.write('\n')
-
 
     def print_textmate_html_errors(self):
         html = """
@@ -893,7 +928,7 @@ class LintChecker(object):
                 else:
                     errorMsg = '%d: %s' % (lineNum, message)
 
-                html += '%(link)s%(errorMsg)s</a></p>\n<p class="source">%(link)s%(source)s</a></p>\n' % { 'link':link, 'errorMsg':errorMsg, 'source':source }
+                html += '%(link)s%(errorMsg)s</a></p>\n<p class="source">%(link)s%(source)s</a></p>\n' % {'link': link, 'errorMsg': errorMsg, 'source': source}
             else:
                 html += '%s%s</p>\n' % (filename, message)
 
